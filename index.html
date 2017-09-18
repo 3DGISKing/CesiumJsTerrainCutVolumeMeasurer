@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Use correct character set. -->
+  <meta charset="utf-8">
+  <!-- Tell IE to use the latest, best version. -->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>Cut Volume Measurer</title>
+  <script src="../Build/Cesium/Cesium.js"></script>
+  <script src="./CesiumMeasurer.js"></script>
+  <style>
+      @import url(../Build/Cesium/Widgets/widgets.css);
+      @import url(./CesiumMeasurer.css);
+      html, body, #cesiumContainer {
+          width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+      }
+
+      #measuretoolbar {
+        position: absolute;
+        top : 700px;
+        right: 30px;
+        display: inline;
+        margin: 10px;
+        padding: 0px;
+        background: #394148;
+      }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="measuretoolbar"></div>
+  <script>
+    var viewer = new Cesium.Viewer('cesiumContainer');
+    var cesiumTerrainProviderMeshes = new Cesium.CesiumTerrainProvider({
+        url : 'https://assets.agi.com/stk-terrain/world',
+        requestWaterMask : true,
+        requestVertexNormals : true
+    });
+
+    viewer.terrainProvider = cesiumTerrainProviderMeshes;
+    viewer.extend(Cesium.viewerCesiumInspectorMixin);
+
+    //fly to Mt Helen
+
+    viewer.camera.flyTo({
+        destination : Cesium.Cartesian3.fromDegrees(-122.188, 46.202, 1500000.0)});
+
+    var cesiumMeasurer = new CesiumMeasurer(viewer);
+    cesiumMeasurer.addToolbar(document.getElementById("measuretoolbar") , {});
+  </script>
+</body>
+</html>
