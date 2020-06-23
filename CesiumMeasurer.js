@@ -67,11 +67,11 @@ var CesiumMeasurer = (function () {
 
             // add to frame div and display coordinates
             frameDiv.appendChild(div);
-        }
+        };
 
         tooltip.prototype.setVisible = function(visible) {
             this._div.style.display = visible ? 'block' : 'none';
-        }
+        };
 
         tooltip.prototype.showAt = function(position, message) {
             if(position && message) {
@@ -80,7 +80,7 @@ var CesiumMeasurer = (function () {
                 this._div.style.left = position.x + 10 + "px";
                 this._div.style.top = (position.y - this._div.clientHeight / 2) + "px";
             }
-        }
+        };
 
         return new tooltip(frameDiv);
     }
@@ -88,20 +88,20 @@ var CesiumMeasurer = (function () {
     _.prototype.addToolbar = function (container, options ) {
         options = copyOptions(options, {container: container});
         return new _.Toolbar(this, options);
-    }
+    };
 
 
     var defaultBillboard = {
         iconUrl: "./img/dragIcon.png",
         shiftX: 0,
         shiftY: 0
-    }
+    };
 
     _.prototype.createBillboardGroup = function(points, options, callbacks) {
         var markers = new _.BillboardGroup(this, options);
         markers.addBillboards(points, callbacks);
         return markers;
-    }
+    };
 
     _.BillboardGroup = function(drawHelper, options) {
 
@@ -116,7 +116,7 @@ var CesiumMeasurer = (function () {
         this._billboards = b;
         // keep an ordered list of billboards
         this._orderedBillboards = [];
-    }
+    };
 
     _.BillboardGroup.prototype.createBillboard = function(position, callbacks) {
 
@@ -202,50 +202,50 @@ var CesiumMeasurer = (function () {
         }
 
         return billboard;
-    }
+    };
 
     _.BillboardGroup.prototype.insertBillboard = function(index, position, callbacks) {
         this._orderedBillboards.splice(index, 0, this.createBillboard(position, callbacks));
-    }
+    };
 
     _.BillboardGroup.prototype.addBillboard = function(position, callbacks) {
         this._orderedBillboards.push(this.createBillboard(position, callbacks));
-    }
+    };
 
     _.BillboardGroup.prototype.addBillboards = function(positions, callbacks) {
         var index =  0;
         for(; index < positions.length; index++) {
             this.addBillboard(positions[index], callbacks);
         }
-    }
+    };
 
     _.BillboardGroup.prototype.updateBillboardsPositions = function(positions) {
         var index =  0;
         for(; index < positions.length; index++) {
             this.getBillboard(index).position = positions[index];
         }
-    }
+    };
 
     _.BillboardGroup.prototype.countBillboards = function() {
         return this._orderedBillboards.length;
-    }
+    };
 
     _.BillboardGroup.prototype.getBillboard = function(index) {
         return this._orderedBillboards[index];
-    }
+    };
 
     _.BillboardGroup.prototype.removeBillboard = function(index) {
         this._billboards.remove(this.getBillboard(index));
         this._orderedBillboards.splice(index, 1);
-    }
+    };
 
     _.BillboardGroup.prototype.remove = function() {
         this._billboards = this._billboards && this._billboards.removeAll() && this._billboards.destroy();
-    }
+    };
 
     _.BillboardGroup.prototype.setOnTop = function() {
         this._scene.primitives.raiseToTop(this._billboards);
-    }
+    };
 
     _.prototype.cleanUp = function() {
         if ( this._prevEntity != undefined) {
@@ -264,7 +264,7 @@ var CesiumMeasurer = (function () {
         }
 
         this._tooltip.setVisible(false);
-      }
+      };
 
     _.prototype.startDrawing = function(options) {
 
@@ -410,7 +410,7 @@ var CesiumMeasurer = (function () {
                 this.stopDrawing();
             }
         }.bind(this), Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-    }
+    };
 
     _.prototype.stopDrawing = function() {
        if(this._mouseHandler != undefined) {
@@ -455,7 +455,7 @@ var CesiumMeasurer = (function () {
         };
 
         this._prevEntity  = this._cesiumViewer.entities.add(drawingPolygon);
-     }
+     };
 
     function computeCentroidOfPolygon(positions) {
         var x = [];
@@ -636,7 +636,7 @@ var CesiumMeasurer = (function () {
         });
 
         return maxHeight;
-   }
+   };
 
      _.Toolbar = (function () {
 
@@ -674,7 +674,7 @@ var CesiumMeasurer = (function () {
 
             addButton(drawOptions.measureTerrainVolumeIcon, function () {
                 cesiumMeasure.startDrawing({});
-            })
+            });
 
             addButton(drawOptions.cleaningIcon, function () {
                 cesiumMeasure.cleanUp();
