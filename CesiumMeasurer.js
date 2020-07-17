@@ -8,7 +8,7 @@ var CesiumMeasurer = (function () {
         this._scene = cesiumWidget.scene;
         this._tooltip = createTooltip(cesiumWidget.container);
         this._cesiumViewer = cesiumWidget;
-        this._debugShowSubTriangles = true;
+        this._debugShowSubTriangles = false;
     }
 
     function clone(from, to) {
@@ -455,7 +455,7 @@ var CesiumMeasurer = (function () {
             }
         };
 
-       // this._prevEntity  = this._cesiumViewer.entities.add(drawingPolygon);
+       this._prevEntity  = this._cesiumViewer.entities.add(drawingPolygon);
      };
 
     function computeCentroidOfPolygon(positions) {

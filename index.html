@@ -40,8 +40,14 @@
 
     //fly to Mt Helen
 
-    viewer.camera.flyTo({
-        destination : Cesium.Cartesian3.fromDegrees(-113.2665534, 36.0939345, 1500.0)});
+    viewer.camera.setView({
+      destination : new Cesium.Cartesian3(-2373192.55443168, -3828178.0494644935, 4519067.903655692),
+      orientation: {
+        heading : 0.7321040128795788,
+        pitch : -0.8212303349877104,
+        roll : 0.0
+      }
+    });
 
     var cesiumMeasurer = new CesiumMeasurer(viewer);
     cesiumMeasurer.addToolbar(document.getElementById("measuretoolbar") , {});
