@@ -624,7 +624,8 @@ var CesiumMeasurer = (function () {
                     polygon : {
                         hierarchy : {
                             positions : positionsarr
-                        } ,
+                        },
+                        extrudedHeight: 0,
                         perPositionHeight : true,
                         material : Cesium.Color.fromRandom().withAlpha(0.5),
                         outline : true,
