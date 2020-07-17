@@ -8,6 +8,7 @@ var CesiumMeasurer = (function () {
         this._scene = cesiumWidget.scene;
         this._tooltip = createTooltip(cesiumWidget.container);
         this._cesiumViewer = cesiumWidget;
+        this._debugShowSubTriangles = true;
     }
 
     function clone(from, to) {
@@ -454,7 +455,7 @@ var CesiumMeasurer = (function () {
             }
         };
 
-        this._prevEntity  = this._cesiumViewer.entities.add(drawingPolygon);
+       // this._prevEntity  = this._cesiumViewer.entities.add(drawingPolygon);
      };
 
     function computeCentroidOfPolygon(positions) {
@@ -552,78 +553,91 @@ var CesiumMeasurer = (function () {
         var i0, i1, i2;
         var height1, height2, height3;
         var p1, p2, p3;
-        var cartesian;
+        var bottomP1, bottomP2, bottomP3;
+        var scratchCartesian = new Cesium.Cartesian3();
         var cartographic;
         var bottomArea;
+        var subTrianglePositions;
 
-        for (var i = 0; i < geom.indices.length ; i += 3) {
+
+        for (i = 0; i < geom.indices.length ; i += 3) {
             i0 = geom.indices[i];
             i1 = geom.indices[i + 1];
             i2 = geom.indices[i + 2];
 
-            cartesian = new Cesium.Cartesian3(geom.attributes.position.values[i0 * 3],
-                                                  geom.attributes.position.values[i0 *3 + 1],
-                                                  geom.attributes.position.values[i0 *3 + 2]);
+            subTrianglePositions = geom.attributes.position.values;
 
-            cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+            scratchCartesian.x = subTrianglePositions[i0 * 3];
+            scratchCartesian.y = subTrianglePositions[i0 * 3 + 1];
+            scratchCartesian.z = subTrianglePositions[i0 * 3 + 2];
 
-            height1= this._scene.globe.getHeight(cartographic);
+            cartographic = Cesium.Cartographic.fromCartesian(scratchCartesian);
 
-            p1 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0/*height1 + 1000*/);
+            height1 = this._scene.globe.getHeight(cartographic);
+
+            p1 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height1);
+            bottomP1 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
 
             if(maxHeight < height1)
                 maxHeight = height1;
 
-            cartesian = new Cesium.Cartesian3(geom.attributes.position.values[i1 * 3],
-                                              geom.attributes.position.values[i1 *3 + 1],
-                                              geom.attributes.position.values[i1 *3 + 2]);
+            scratchCartesian.x = subTrianglePositions[i1 * 3];
+            scratchCartesian.y = subTrianglePositions[i1 * 3 + 1];
+            scratchCartesian.z = subTrianglePositions[i1 * 3 + 2];
 
-            cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+            cartographic = Cesium.Cartographic.fromCartesian(scratchCartesian);
 
             height2 = this._scene.globe.getHeight(cartographic);
 
-            var p2 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0 /*height2 + 1000*/);
+            p2 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height2);
+            bottomP2 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
 
             if(maxHeight < height2)
                 maxHeight = height2;
 
-            cartesian = new Cesium.Cartesian3(geom.attributes.position.values[i2 * 3],
-                                              geom.attributes.position.values[i2 * 3 + 1],
-                                              geom.attributes.position.values[i2 *3 + 2]);
+            scratchCartesian.x = subTrianglePositions[i2 * 3];
+            scratchCartesian.y = subTrianglePositions[i2 * 3 + 1];
+            scratchCartesian.z = subTrianglePositions[i2 * 3 + 2];
 
-            cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+            cartographic = Cesium.Cartographic.fromCartesian(scratchCartesian);
 
             height3 = this._scene.globe.getHeight(cartographic);
 
-            p3 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0 /*height3 + 1000*/);
+            p3 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height3);
+            bottomP3 = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
 
             if(maxHeight < height3)
                 maxHeight = height3;
 
-            bottomArea = computeAreaOfTriangle(p1, p2, p3);
+            bottomArea = computeAreaOfTriangle(bottomP1, bottomP2, bottomP3);
 
             totalCutVolume = totalCutVolume + bottomArea * (height1- minHeight + height2 - minHeight + height3 - minHeight) / 3;
 
-           /* var positionsarr = [];
+            if (this._debugShowSubTriangles) {
+                var positionsarr = [];
 
-            positionsarr.push(p1);
-            positionsarr.push(p2);
-            positionsarr.push(p3);
+                positionsarr.push(p1);
+                positionsarr.push(p2);
+                positionsarr.push(p3);
 
-            var drawingPolygon = {
-                polygon : {
-                    hierarchy : {
-                        positions : positionsarr
-                    } ,
-                    perPositionHeight : true,
-                    material : Cesium.Color.RED.withAlpha(0.5),
-                    outline : true,
-                    outlineColor : Cesium.Color.WHITE,
-                    outlineWidth : 2
-                }
-            };
+                var drawingPolygon = {
+                    polygon : {
+                        hierarchy : {
+                            positions : positionsarr
+                        } ,
+                        perPositionHeight : true,
+                        material : Cesium.Color.fromRandom().withAlpha(0.5),
+                        outline : true,
+                        closeTop : true,
+                        closeBottom : true,
+                        outlineColor : Cesium.Color.WHITE,
+                        outlineWidth : 2
+                    }
+                };
 
-            this._cesiumViewer.entities.add(drawingPolygon);*/
+                this._cesiumViewer.entities.add(drawingPolygon);
+            }
+
         }
 
         var centroid = computeCentroidOfPolygon(this._positions);
