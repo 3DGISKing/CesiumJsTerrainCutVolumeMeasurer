@@ -1,56 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Use correct character set. -->
-  <meta charset="utf-8">
-  <!-- Tell IE to use the latest, best version. -->
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
-  <title>Cut Volume Measurer</title>
-  <link rel="stylesheet" href="https://cesiumjs.org/releases/1.70.1/Build/Cesium/Widgets/widgets.css">
-  <link rel="stylesheet" href="https://cesiumjs.org/Cesium/Build/Apps/Sandcastle/templates/bucket.css">
-  <script src="https://cesiumjs.org/releases/1.70.1/Build/Cesium/Cesium.js"></script>
-  <script src="./CesiumMeasurer.js"></script>
-  <style>
-      html, body, #cesiumContainer {
-          width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
-      }
+    <!-- Use correct character set. -->
+    <meta charset="utf-8">
+    <!-- Tell IE to use the latest, best version. -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+    <title>Terrain Cut Volume Measurer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.106.1/Widgets/widgets.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.71.0/Cesium.js"></script>
+    <link rel="stylesheet" href="./CesiumMeasurer.css">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
 
-      #measuretoolbar {
-        position: absolute;
-        top : 700px;
-        right: 30px;
-        display: inline;
-        margin: 10px;
-        padding: 0px;
-        background: #394148;
-      }
-  </style>
+        #toolbarContainer {
+            position: absolute;
+            top: 700px;
+            right: 30px;
+            display: inline;
+            margin: 10px;
+            padding: 0;
+            background: #394148;
+        }
+
+        #controlsContainer {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+        }
+    </style>
 </head>
 <body>
-  <div id="cesiumContainer"></div>
-  <div id="measuretoolbar"></div>
-  <script>
-    var viewer = new Cesium.Viewer("cesiumContainer", {
-      terrainProvider: Cesium.createWorldTerrain(),
-    });
+<div id="cesiumContainer"></div>
+<div id="toolbarContainer" class="cesiumMeasureToolbar"></div>
+<div id="controlsContainer" style="display: none">
+    <h4 style="color: white">Granularity</h4>
+    <input id="granularity" type="range" min="-4" max="4" value="0" class="slider">
 
-    viewer.extend(Cesium.viewerCesiumInspectorMixin);
+    <h4 style="color: white">Vertical Offset</h4>
+    <input id="verticalOffset" type="range" min="0" max="10000" value="100" class="slider">
+</div>
+
+<progress id="progressBar"
+          style="position: absolute; display: none; left: 180px; bottom: 70px;  width: calc(100% - 200px)" value="0"
+          max="100"> 0%
+</progress>
+
+<script type="module">
+    import CutVolumeMeasurer from "./CutVolumeMeasurer.js"
+
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxMDVmZDZlOS1jNzYxLTQ3MWYtYmNlNi0xMzA4NjA1OTc1NDgiLCJpZCI6OTc4NiwiaWF0IjoxNjE3MTU2MTQ2fQ.vtM1I7acSXgL6riYVHUMz_lWeaCESiUOeYXVM2lft50";
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+        terrainProvider: Cesium.createWorldTerrain(),
+    });
 
     //fly to Mt Helen
 
     viewer.camera.setView({
-      destination : new Cesium.Cartesian3(-2373192.55443168, -3828178.0494644935, 4519067.903655692),
-      orientation: {
-        heading : 0.7321040128795788,
-        pitch : -0.8212303349877104,
-        roll : 0.0
-      }
+        destination: new Cesium.Cartesian3(-2373192.55443168, -3828178.0494644935, 4519067.903655692),
+        orientation: {
+            heading: 0.7321040128795788,
+            pitch: -0.8212303349877104,
+            roll: 0.0
+        }
     });
 
-    var cesiumMeasurer = new CesiumMeasurer(viewer);
-    cesiumMeasurer.addToolbar(document.getElementById("measuretoolbar") , {});
-  </script>
+    const cutVolumeMeasurer = new CutVolumeMeasurer(viewer);
+    cutVolumeMeasurer.addToolbar(document.getElementById("toolbarContainer"));
+
+    const granularitySlider = document.getElementById("granularity");
+
+    granularitySlider.onchange = function () {
+        cutVolumeMeasurer.granularity = this.value;
+    };
+
+    const verticalOffset = document.getElementById("verticalOffset");
+
+    verticalOffset.onchange = function () {
+        cutVolumeMeasurer.verticalOffset = this.value;
+    };
+
+    cutVolumeMeasurer.progress.addEventListener((progress) => {
+        const progressBar = document.getElementById("progressBar");
+        progressBar.style.display = "block";
+
+        const controlsContainer = document.getElementById("controlsContainer");
+
+        document.body.style.cursor = 'wait';
+
+        progressBar.setAttribute("value", (progress * 100).toFixed(1));
+
+        if (progress === 1) {
+            progressBar.style.display = "none";
+            document.body.style.cursor = "default";
+
+            controlsContainer.style.display = "block";
+        }
+    });
+</script>
 </body>
 </html>
