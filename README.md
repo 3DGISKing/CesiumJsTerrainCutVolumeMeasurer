@@ -1,6 +1,6 @@
 # Terrain Cut Volume Measure using CesiumJS    
 
-https://coolgis.org/TerrainCutVolume/index.html
+https://coolgis.org/projects/cesium/TerrainCutVolume/index.html
 
 [![](http://img.youtube.com/vi/EAJTSKiGNTY/0.jpg)](http://www.youtube.com/watch?v=EAJTSKiGNTY "")
 
