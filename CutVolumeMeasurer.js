@@ -41,14 +41,30 @@ const defaultBillboard = {
     shiftY: 0
 };
 
+const scratchCartographic = new Cartographic();
+const scratchBottom1 = new Cartesian3();
+const scratchBottom2 = new Cartesian3();
+const scratchBottom3 = new Cartesian3();
+const scratchMeshBottom1 = new Cartesian3();
+const scratchMeshBottom2 = new Cartesian3();
+const scratchMeshBottom3 = new Cartesian3();
+const scratchEdge1 = new Cartesian3();
+const scratchEdge2 = new Cartesian3();
+const scratchCross = new Cartesian3();
+
 function computeAreaOfTriangle(pos1, pos2, pos3) {
-    const a = Cartesian3.distance(pos1, pos2);
-    const b = Cartesian3.distance(pos2, pos3);
-    const c = Cartesian3.distance(pos3, pos1);
+    Cartesian3.subtract(pos2, pos1, scratchEdge1);
+    Cartesian3.subtract(pos3, pos1, scratchEdge2);
+    Cartesian3.cross(scratchEdge1, scratchEdge2, scratchCross);
+    return Cartesian3.magnitude(scratchCross) * 0.5;
+}
 
-    const S = (a + b + c) / 2;
-
-    return Math.sqrt(S * (S - a) * (S - b) * (S - c));
+function writeHeightColor(buffer, offset, heightAboveMin, invHeightDiff) {
+    const ratio = CesiumMath.clamp(heightAboveMin * invHeightDiff, 0, 1);
+    buffer[offset] = Math.round(ratio * 255);
+    buffer[offset + 1] = 0;
+    buffer[offset + 2] = Math.round((1 - ratio) * 255);
+    buffer[offset + 3] = 255;
 }
 
 function computeCentroidOfPolygon(positions) {
@@ -316,8 +332,8 @@ export default class CutVolumeMeasurer {
 
                 if (!partialPromise) {
                     partialPromise = scene.clampToHeightMostDetailed(progressStepsPositions).then(clampedPositions => {
-                        clampedPositions.forEach(position => {
-                            updatedPositions.push(position);
+                        clampedPositions.forEach((position, index) => {
+                            updatedPositions.push(position ?? progressStepsPositions[index]);
                         });
 
                         progress += progressStep;
@@ -329,8 +345,8 @@ export default class CutVolumeMeasurer {
                             reject();
                         } else {
                             return scene.clampToHeightMostDetailed(progressStepsPositions).then(clampedPositions => {
-                                clampedPositions.forEach(position => {
-                                    updatedPositions.push(position);
+                                clampedPositions.forEach((position, index) => {
+                                    updatedPositions.push(position ?? progressStepsPositions[index]);
                                 });
 
                                 progress += progressStep;
@@ -354,40 +370,41 @@ export default class CutVolumeMeasurer {
     }
 
     _doComputeCutVolume(trianglesPositions, minHeight) {
-        const count = trianglesPositions.length / 3;
-        const scratchCartographic = new Cartographic();
+        const triangleCount = trianglesPositions.length / 3;
+        const vertexCount = triangleCount * 3;
+        const longitudes = new Float64Array(vertexCount);
+        const latitudes = new Float64Array(vertexCount);
+        const heights = new Float64Array(vertexCount);
+
+        const minHeight3 = minHeight * 3;
         let maxHeight = 0;
         let totalCutVolume = 0;
 
-        for (let i = 0; i < count; i++) {
-            const p1 = trianglesPositions[i * 3];
-            let cartographic = Cartographic.fromCartesian(p1, Ellipsoid.WGS84, scratchCartographic);
-            const bottomP1 = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
-            const height1 = cartographic.height;
+        for (let i = 0; i < vertexCount; i++) {
+            const cartographic = Cartographic.fromCartesian(
+                trianglesPositions[i],
+                Ellipsoid.WGS84,
+                scratchCartographic
+            );
 
-            if (maxHeight < height1)
-                maxHeight = height1;
+            longitudes[i] = cartographic.longitude;
+            latitudes[i] = cartographic.latitude;
+            heights[i] = cartographic.height;
 
-            const p2 = trianglesPositions[i * 3 + 1];
-            cartographic = Cartographic.fromCartesian(p2, Ellipsoid.WGS84, scratchCartographic);
-            const bottomP2 = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
-            const height2 = cartographic.height;
+            if (maxHeight < cartographic.height) {
+                maxHeight = cartographic.height;
+            }
+        }
 
-            if (maxHeight < height2)
-                maxHeight = height2;
+        for (let i = 0; i < triangleCount; i++) {
+            const i3 = i * 3;
 
-            const p3 = trianglesPositions[i * 3 + 2];
-            cartographic = Cartographic.fromCartesian(p3, Ellipsoid.WGS84, scratchCartographic);
-            const bottomP3 = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
-            const height3 = cartographic.height;
+            Cartesian3.fromRadians(longitudes[i3], latitudes[i3], 0, Ellipsoid.WGS84, scratchBottom1);
+            Cartesian3.fromRadians(longitudes[i3 + 1], latitudes[i3 + 1], 0, Ellipsoid.WGS84, scratchBottom2);
+            Cartesian3.fromRadians(longitudes[i3 + 2], latitudes[i3 + 2], 0, Ellipsoid.WGS84, scratchBottom3);
 
-            if (maxHeight < height3)
-                maxHeight = height3;
-
-            const bottomArea = computeAreaOfTriangle(bottomP1, bottomP2, bottomP3);
-            const height = (height1 + height2 + height3 - 3 * minHeight) / 3;
-
-            totalCutVolume = totalCutVolume + bottomArea * height;
+            const bottomArea = computeAreaOfTriangle(scratchBottom1, scratchBottom2, scratchBottom3);
+            totalCutVolume += bottomArea * ((heights[i3] + heights[i3 + 1] + heights[i3 + 2] - minHeight3) / 3);
         }
 
         const centroid = computeCentroidOfPolygon(this._positions);
@@ -404,207 +421,201 @@ export default class CutVolumeMeasurer {
             pixelOffset: new Cartesian2(6, -4)
         });
 
-        this._drawFillMesh(trianglesPositions, minHeight, maxHeight);
-        this._drawWireframeOfTopTriangles(trianglesPositions);
+        this._buildVisualizationMeshes(trianglesPositions, longitudes, latitudes, heights, minHeight, maxHeight);
     }
 
-    _getColorByHeight(heightDiff, maxHeightDiff) {
-        let ratio = heightDiff / maxHeightDiff;
-        ratio = CesiumMath.clamp(ratio, 0, 1);
-
-        return Color.lerp(Color.BLUE.withAlpha(1.0), Color.RED.withAlpha(1.0), ratio, new Color());
-    }
-
-    _drawFillMesh(trianglesPositions, minHeight, maxHeight) {
-        const indices = [];
-        const colors = [];
-
-        const positions = [];
+    _buildVisualizationMeshes(trianglesPositions, longitudes, latitudes, heights, minHeight, maxHeight) {
         const triangleCount = trianglesPositions.length / 3;
+        const invHeightDiff = maxHeight > minHeight ? 1 / (maxHeight - minHeight) : 0;
 
-        // const triangleCount = 1;
+        const fillPositionBuffer = new Float64Array(triangleCount * 18);
+        const fillColorBuffer = new Uint8Array(triangleCount * 24);
+        const fillIndices = new Uint16Array(triangleCount * 24);
 
-        const heightDiff = maxHeight - minHeight;
+        const wirePositionBuffer = new Float64Array(triangleCount * 9);
+        const wireColorBuffer = new Uint8Array(triangleCount * 12);
+        const wireIndices = new Uint16Array(triangleCount * 3);
+
+        let fillPositionOffset = 0;
+        let fillColorOffset = 0;
+        let fillIndexOffset = 0;
+        let wirePositionOffset = 0;
+        let wireColorOffset = 0;
+        let wireIndexOffset = 0;
 
         for (let i = 0; i < triangleCount; i++) {
-            const topVertex1 = trianglesPositions[i * 3];
-            const topVertex2 = trianglesPositions[i * 3 + 1];
-            const topVertex3 = trianglesPositions[i * 3 + 2];
+            const i3 = i * 3;
+            const topVertex1 = trianglesPositions[i3];
+            const topVertex2 = trianglesPositions[i3 + 1];
+            const topVertex3 = trianglesPositions[i3 + 2];
 
-            const topVertex1Cartographic = Cartographic.fromCartesian(topVertex1, Ellipsoid.WGS84, new Cartographic());
-            const topVertex2Cartographic = Cartographic.fromCartesian(topVertex2, Ellipsoid.WGS84, new Cartographic());
-            const topVertex3Cartographic = Cartographic.fromCartesian(topVertex3, Ellipsoid.WGS84, new Cartographic());
+            const bottomVertex1 = Cartesian3.fromRadians(longitudes[i3], latitudes[i3], minHeight, Ellipsoid.WGS84, scratchMeshBottom1);
+            const bottomVertex2 = Cartesian3.fromRadians(longitudes[i3 + 1], latitudes[i3 + 1], minHeight, Ellipsoid.WGS84, scratchMeshBottom2);
+            const bottomVertex3 = Cartesian3.fromRadians(longitudes[i3 + 2], latitudes[i3 + 2], minHeight, Ellipsoid.WGS84, scratchMeshBottom3);
 
-            const bottomVertex1 = Cartesian3.fromRadians(topVertex1Cartographic.longitude, topVertex1Cartographic.latitude, minHeight);
-            const bottomVertex2 = Cartesian3.fromRadians(topVertex2Cartographic.longitude, topVertex2Cartographic.latitude, minHeight);
-            const bottomVertex3 = Cartesian3.fromRadians(topVertex3Cartographic.longitude, topVertex3Cartographic.latitude, minHeight);
+            fillPositionBuffer[fillPositionOffset++] = topVertex1.x;
+            fillPositionBuffer[fillPositionOffset++] = topVertex1.y;
+            fillPositionBuffer[fillPositionOffset++] = topVertex1.z;
+            fillPositionBuffer[fillPositionOffset++] = topVertex2.x;
+            fillPositionBuffer[fillPositionOffset++] = topVertex2.y;
+            fillPositionBuffer[fillPositionOffset++] = topVertex2.z;
+            fillPositionBuffer[fillPositionOffset++] = topVertex3.x;
+            fillPositionBuffer[fillPositionOffset++] = topVertex3.y;
+            fillPositionBuffer[fillPositionOffset++] = topVertex3.z;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex1.x;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex1.y;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex1.z;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex2.x;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex2.y;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex2.z;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex3.x;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex3.y;
+            fillPositionBuffer[fillPositionOffset++] = bottomVertex3.z;
 
-            positions.push(topVertex1, topVertex2, topVertex3, bottomVertex1, bottomVertex2, bottomVertex3);
+            writeHeightColor(fillColorBuffer, fillColorOffset, heights[i3] - minHeight, invHeightDiff);
+            fillColorOffset += 4;
+            writeHeightColor(fillColorBuffer, fillColorOffset, heights[i3 + 1] - minHeight, invHeightDiff);
+            fillColorOffset += 4;
+            writeHeightColor(fillColorBuffer, fillColorOffset, heights[i3 + 2] - minHeight, invHeightDiff);
+            fillColorOffset += 4;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 255;
+            fillColorBuffer[fillColorOffset++] = 255;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 255;
+            fillColorBuffer[fillColorOffset++] = 255;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 0;
+            fillColorBuffer[fillColorOffset++] = 255;
+            fillColorBuffer[fillColorOffset++] = 255;
 
             const base = i * 6;
+            fillIndices[fillIndexOffset++] = base;
+            fillIndices[fillIndexOffset++] = base + 1;
+            fillIndices[fillIndexOffset++] = base + 2;
+            fillIndices[fillIndexOffset++] = base;
+            fillIndices[fillIndexOffset++] = base + 1;
+            fillIndices[fillIndexOffset++] = base + 3;
+            fillIndices[fillIndexOffset++] = base + 1;
+            fillIndices[fillIndexOffset++] = base + 4;
+            fillIndices[fillIndexOffset++] = base + 3;
+            fillIndices[fillIndexOffset++] = base + 1;
+            fillIndices[fillIndexOffset++] = base + 2;
+            fillIndices[fillIndexOffset++] = base + 4;
+            fillIndices[fillIndexOffset++] = base + 2;
+            fillIndices[fillIndexOffset++] = base + 5;
+            fillIndices[fillIndexOffset++] = base + 4;
+            fillIndices[fillIndexOffset++] = base;
+            fillIndices[fillIndexOffset++] = base + 2;
+            fillIndices[fillIndexOffset++] = base + 3;
+            fillIndices[fillIndexOffset++] = base + 2;
+            fillIndices[fillIndexOffset++] = base + 5;
+            fillIndices[fillIndexOffset++] = base + 3;
 
-            // draw top triangle
-            indices.push(base, base + 1, base + 2);
+            wirePositionBuffer[wirePositionOffset++] = topVertex1.x;
+            wirePositionBuffer[wirePositionOffset++] = topVertex1.y;
+            wirePositionBuffer[wirePositionOffset++] = topVertex1.z;
+            wirePositionBuffer[wirePositionOffset++] = topVertex2.x;
+            wirePositionBuffer[wirePositionOffset++] = topVertex2.y;
+            wirePositionBuffer[wirePositionOffset++] = topVertex2.z;
+            wirePositionBuffer[wirePositionOffset++] = topVertex3.x;
+            wirePositionBuffer[wirePositionOffset++] = topVertex3.y;
+            wirePositionBuffer[wirePositionOffset++] = topVertex3.z;
 
-            indices.push(base, base + 1, base + 3);
-            indices.push(base + 1, base + 4, base + 3);
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
+            wireColorBuffer[wireColorOffset++] = 255;
 
-            indices.push(base + 1, base + 2, base + 4);
-            indices.push(base + 2, base + 5, base + 4);
-
-            indices.push(base, base + 2, base + 3);
-            indices.push(base + 2, base + 5, base + 3);
-
-            colors.push(this._getColorByHeight(topVertex1Cartographic.height - minHeight, heightDiff));
-            colors.push(this._getColorByHeight(topVertex2Cartographic.height - minHeight, heightDiff));
-            colors.push(this._getColorByHeight(topVertex3Cartographic.height - minHeight, heightDiff));
-
-            colors.push(Color.BLUE);
-            colors.push(Color.BLUE);
-            colors.push(Color.BLUE);
+            const wireBase = i * 3;
+            wireIndices[wireIndexOffset++] = wireBase;
+            wireIndices[wireIndexOffset++] = wireBase + 1;
+            wireIndices[wireIndexOffset++] = wireBase + 2;
         }
 
-        const positionBuffer = new Float64Array(Cartesian3.packArray(positions, []));
-        const colorsByte = [];
-
-        colors.forEach((color) => {
-            const bytes = [];
-            color.toBytes(bytes);
-
-            bytes.forEach((byte) => {
-                colorsByte.push(byte);
-            });
-        });
-
-        const colorBuffer = new Uint8Array(colorsByte);
-
-        const boundingSphere = BoundingSphere.fromVertices(positionBuffer);
-        const geometry = new Geometry({
+        const fillBoundingSphere = BoundingSphere.fromVertices(fillPositionBuffer);
+        const fillGeometry = new Geometry({
             attributes: {
                 position: new GeometryAttribute({
                     componentDatatype: ComponentDatatype.DOUBLE,
                     componentsPerAttribute: 3,
-                    values: positionBuffer
+                    values: fillPositionBuffer
                 }),
                 color: new GeometryAttribute({
                     componentDatatype: ComponentDatatype.UNSIGNED_BYTE,
                     componentsPerAttribute: 4,
-                    values: colorBuffer,
+                    values: fillColorBuffer,
                     normalize: true
                 })
             },
-            indices: new Uint16Array(indices),
-            // primitiveType: PrimitiveType.LINES,
+            indices: fillIndices,
             primitiveType: PrimitiveType.TRIANGLES,
-            boundingSphere: boundingSphere
+            boundingSphere: fillBoundingSphere
         });
 
-        this._centerOfFillMesh = boundingSphere.center;
+        this._centerOfFillMesh = fillBoundingSphere.center;
+        GeometryPipeline.computeNormal(fillGeometry);
 
-        GeometryPipeline.computeNormal(geometry);
+        this._primitiveFillMesh = this._createColoredPrimitive(
+            fillGeometry,
+            fillBoundingSphere.center
+        );
+        this._scene.primitives.add(this._primitiveFillMesh);
 
-        const instance = new GeometryInstance({
-            geometry: geometry
+        const wireBoundingSphere = BoundingSphere.fromVertices(wirePositionBuffer);
+        const wireGeometry = new Geometry({
+            attributes: {
+                position: new GeometryAttribute({
+                    componentDatatype: ComponentDatatype.DOUBLE,
+                    componentsPerAttribute: 3,
+                    values: wirePositionBuffer
+                }),
+                color: new GeometryAttribute({
+                    componentDatatype: ComponentDatatype.UNSIGNED_BYTE,
+                    componentsPerAttribute: 4,
+                    values: wireColorBuffer,
+                    normalize: true
+                })
+            },
+            indices: wireIndices,
+            primitiveType: PrimitiveType.LINES,
+            boundingSphere: wireBoundingSphere
         });
 
-        const toWorld = Transforms.eastNorthUpToFixedFrame(this._centerOfFillMesh);
-        const invWorld = Matrix4.inverseTransformation(toWorld, new Matrix4());
-        const translation = Matrix4.fromTranslation(new Cartesian3(0, 0, this._verticalOffset), new Matrix4());
+        this._centerOfWireframe = wireBoundingSphere.center;
+        GeometryPipeline.computeNormal(wireGeometry);
 
-        const modelMatrix = toWorld;
-        Matrix4.multiply(modelMatrix, translation, modelMatrix);
-        Matrix4.multiply(modelMatrix, invWorld, modelMatrix);
-
-        const primitive = new Primitive({
-            geometryInstances: instance,
-            appearance: new PerInstanceColorAppearance({
-                translucent: true,
-                flat: true
-            }),
-            asynchronous: false,
-            releaseGeometryInstances: true,
-            modelMatrix: modelMatrix
-        });
-
-        this._scene.primitives.add(primitive);
-
-        this._primitiveFillMesh = primitive;
+        this._primitiveWireframe = this._createColoredPrimitive(
+            wireGeometry,
+            wireBoundingSphere.center
+        );
+        this._scene.primitives.add(this._primitiveWireframe);
     }
 
-    _drawWireframeOfTopTriangles(trianglesPositions) {
-        const indices = [];
-        const colors = [];
-
-        const positions = [];
-        const triangleCount = trianglesPositions.length / 3;
-
-        for (let i = 0; i < triangleCount; i++) {
-            const topVertex1 = trianglesPositions[i * 3];
-            const topVertex2 = trianglesPositions[i * 3 + 1];
-            const topVertex3 = trianglesPositions[i * 3 + 2];
-
-            positions.push(topVertex1, topVertex2, topVertex3);
-
-            const base = i * 3;
-
-            // draw top triangle
-            indices.push(base, base + 1, base + 2);
-
-            colors.push(Color.WHITE, Color.WHITE, Color.WHITE);
-        }
-
-        const positionBuffer = new Float64Array(Cartesian3.packArray(positions, []));
-        const colorsByte = [];
-
-        colors.forEach((color) => {
-            const bytes = [];
-            color.toBytes(bytes);
-
-            bytes.forEach((byte) => {
-                colorsByte.push(byte);
-            });
-        });
-
-        const colorBuffer = new Uint8Array(colorsByte);
-
-        const boundingSphere = BoundingSphere.fromVertices(positionBuffer);
-        const geometry = new Geometry({
-            attributes: {
-                position: new GeometryAttribute({
-                    componentDatatype: ComponentDatatype.DOUBLE,
-                    componentsPerAttribute: 3,
-                    values: positionBuffer
-                }),
-                color: new GeometryAttribute({
-                    componentDatatype: ComponentDatatype.UNSIGNED_BYTE,
-                    componentsPerAttribute: 4,
-                    values: colorBuffer,
-                    normalize: true
-                })
-            },
-            indices: new Uint16Array(indices),
-            primitiveType: PrimitiveType.LINES,
-            boundingSphere: boundingSphere
-        });
-
-        this._centerOfWireframe = boundingSphere.center;
-
-        GeometryPipeline.computeNormal(geometry);
-
-        const instance = new GeometryInstance({
-            geometry: geometry
-        });
-
-        const toWorld = Transforms.eastNorthUpToFixedFrame(this._centerOfWireframe);
+    _createColoredPrimitive(geometry, center) {
+        const toWorld = Transforms.eastNorthUpToFixedFrame(center);
         const invWorld = Matrix4.inverseTransformation(toWorld, new Matrix4());
         const translation = Matrix4.fromTranslation(new Cartesian3(0, 0, this._verticalOffset), new Matrix4());
+        const modelMatrix = Matrix4.multiply(
+            toWorld,
+            Matrix4.multiply(translation, invWorld, new Matrix4()),
+            new Matrix4()
+        );
 
-        const modelMatrix = toWorld;
-        Matrix4.multiply(modelMatrix, translation, modelMatrix);
-        Matrix4.multiply(modelMatrix, invWorld, modelMatrix);
-
-        const primitive = new Primitive({
-            geometryInstances: instance,
+        return new Primitive({
+            geometryInstances: new GeometryInstance({
+                geometry: geometry
+            }),
             appearance: new PerInstanceColorAppearance({
                 translucent: true,
                 flat: true
@@ -613,10 +624,6 @@ export default class CutVolumeMeasurer {
             releaseGeometryInstances: true,
             modelMatrix: modelMatrix
         });
-
-        this._scene.primitives.add(primitive);
-
-        this._primitiveWireframe = primitive;
     }
 
     cleanUp() {
