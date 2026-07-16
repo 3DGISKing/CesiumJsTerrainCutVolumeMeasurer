@@ -4,7 +4,6 @@ const {
     ColorGeometryInstanceAttribute,
     CoplanarPolygonGeometry,
     createGuid,
-    defaultValue,
     destroyObject,
     GeometryInstance,
     GroundPrimitive,
@@ -15,18 +14,18 @@ const {
 } = window.Cesium;
 
 export default function PolygonPrimitive(options) {
-    options = defaultValue(options, defaultValue.EMPTY_OBJECT);
+    options = options ?? {};
 
-    this.show = defaultValue(options.show, true);
-    const color = Color.clone(defaultValue(options.color, Color.WHITE));
+    this.show = options.show ?? true;
+    const color = Color.clone(options.color ?? Color.WHITE);
     this._id = createGuid();
     this._color = color;
     this._depthFailColor = color;
-    this._positions = defaultValue(options.positions, []);
+    this._positions = options.positions ?? [];
     this._boundingSphere = new BoundingSphere();
     this._primitive = undefined;
-    this._depthTest = defaultValue(options.depthTest, true);
-    this._clampToGround = defaultValue(options.clampToGround, true);
+    this._depthTest = options.depthTest ?? true;
+    this._clampToGround = options.clampToGround ?? true;
     this._update = true;
 }
 

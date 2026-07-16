@@ -148,7 +148,7 @@ export default class CutVolumeMeasurer {
         mouseHandler.setInputAction(function (movement) {
             // check if drawing is finished.
             if (positions.length >= minPoints) {
-                const firstPointScreenPosition = SceneTransforms.wgs84ToWindowCoordinates(scene, positions[0]);
+                const firstPointScreenPosition = SceneTransforms.worldToWindowCoordinates(scene, positions[0]);
 
                 if (firstPointScreenPosition !== undefined) {
                     const dx = firstPointScreenPosition.x - movement.position.x;
